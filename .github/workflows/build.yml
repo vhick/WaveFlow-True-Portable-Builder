@@ -1,0 +1,118 @@
+name: Build WaveFlow True Portable
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Windows x64 source build and ZIP-only packaging
+    runs-on: windows-2022
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout standalone builder
+        uses: actions/checkout@v4
+
+      - name: Set up pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.98.0'
+          targets: x86_64-pc-windows-msvc
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Initialize MSVC compiler
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Download official WaveFlow v1.8.4 source and patch
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git clone --depth 1 --branch v1.8.4 https://github.com/InstaZDLL/WaveFlow.git upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Could not clone official v1.8.4 tag' }
+          git -C upstream rev-parse HEAD
+          python scripts/patch_portable.py --source upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Portable source patch refused upstream changes' }
+          git -C upstream diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Portable patch whitespace validation failed' }
+          git -C upstream diff -- src-tauri/crates/app/tauri.conf.json src-tauri/crates/app/src/paths.rs src-tauri/crates/app/src/logging.rs src-tauri/crates/app/src/commands/preferences.rs src-tauri/crates/app/src/lib.rs | Out-File upstream/PORTABLE_CHANGES.diff -Encoding utf8
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: upstream/src-tauri
+          cache-on-failure: true
+
+      - name: Build official music engine and GUI without installer
+        working-directory: upstream
+        run: |
+          $ErrorActionPreference = 'Stop'
+          bun install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw 'Bun dependency installation failed' }
+          # Project-specific Tauri wrapper injects the correct nested config path.
+          # Upstream Cargo defaults are patched to sync_v2 only: no installer updater.
+          bun run tauri build --no-bundle --features sync_v2
+          if ($LASTEXITCODE -ne 0) { throw 'WaveFlow source compilation failed' }
+          if (!(Test-Path -LiteralPath src-tauri/target/release/waveflow.exe)) { throw 'Expected WaveFlow executable missing' }
+
+      - name: Compile native PortableApps launcher and original icon
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $icon = 'upstream/src-tauri/crates/app/icons/icon.ico'
+          if (!(Test-Path -LiteralPath $icon)) { throw 'Original WaveFlow icon missing' }
+          Copy-Item -LiteralPath $icon -Destination launcher/icon.ico -Force
+          Push-Location launcher
+          try {
+            & rc.exe /nologo /foicon.res icon.rc
+            if ($LASTEXITCODE -ne 0) { throw 'Icon resource build failed' }
+            & cl.exe /nologo /std:c++17 /EHsc /MT /O2 /W3 /utf-8 /DUNICODE /D_UNICODE /Fe:WaveFlowPortable.exe WaveFlowPortable.cpp icon.res /link /SUBSYSTEM:WINDOWS advapi32.lib user32.lib shell32.lib
+            if ($LASTEXITCODE -ne 0) { throw 'Launcher compilation failed' }
+          } finally { Pop-Location }
+
+      - name: Package ZIP with Data preservation and validate
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./scripts/package.ps1 -Source (Join-Path $pwd 'upstream') -BuilderRoot $pwd
+          $required = @('WaveFlowPortable.exe','App/WaveFlow.exe','App/AppInfo/appinfo.ini','App/AppInfo/appicon.ico','Data/KEEP.txt','Data/TraceGuard/KEEP.txt')
+          foreach ($rel in $required) {
+            $path = Join-Path (Join-Path $pwd 'dist/WaveFlowPortable') $rel
+            if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing portable component: $rel" }
+            if ((Get-Item -LiteralPath $path).Length -eq 0) { throw "Empty portable component: $rel" }
+          }
+          if (!(Test-Path -LiteralPath 'dist/WaveFlowPortable-v1.8.4-win64.zip')) { throw 'ZIP archive missing' }
+          Write-Host 'PORTABLE PACKAGE VALIDATION OK'
+
+      - name: Upload ZIP only (1 day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaveFlowPortable-v1.8.4-win64
+          path: dist/WaveFlowPortable-v1.8.4-win64.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload build diagnostics if failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaveFlow-build-diagnostics
+          path: |
+            upstream/PORTABLE_PATCH_SUMMARY.txt
+            upstream/PORTABLE_CHANGES.diff
+            upstream/src-tauri/target/release/build/**/stderr
+          retention-days: 1
+          if-no-files-found: ignore
