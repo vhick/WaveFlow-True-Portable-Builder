@@ -39,6 +39,12 @@ jobs:
         with:
           arch: amd64
 
+      - name: Validate fail-closed source patches (offline regression tests)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tests/test_patch.py
+          if ($LASTEXITCODE -ne 0) { throw 'Portable source patch regression tests failed' }
+
       - name: Download official WaveFlow v1.8.4 source and patch
         run: |
           $ErrorActionPreference = 'Stop'

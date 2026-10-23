@@ -1,3 +1,12 @@
+# v1.1 — 2026-10-23
+
+- Fixes GitHub Actions failure `PATCH FAILED disable Windows startup registry integration: expected exactly 1 original snippet, got 0`.
+- Safely matches both upstream autostart function boundaries regardless of harmless whitespace differences.
+- Validates that the only removed code contains exactly the expected registry-changing autostart calls; fails closed on unfamiliar code.
+- Makes removal of the Tauri autostart-plugin registration whitespace-tolerant.
+- No changes to compiled launcher behavior, data isolation, TraceGuard, official source version, or output layout.
+- The full Windows build has not been executed locally.
+
 # WaveFlow True Portable Builder
 
 ## v1.0 — 2026-10-23

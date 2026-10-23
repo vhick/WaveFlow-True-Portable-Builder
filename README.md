@@ -1,4 +1,4 @@
-# WaveFlow True Portable Builder v1.0
+# WaveFlow True Portable Builder v1.1
 
 Standalone, **manual** GitHub Actions builder for [InstaZDLL/WaveFlow](https://github.com/InstaZDLL/WaveFlow) **v1.8.4**, Windows x64. This is a builder repository, NOT a finished Windows app.
 
@@ -7,7 +7,7 @@ Standalone, **manual** GitHub Actions builder for [InstaZDLL/WaveFlow](https://g
 1. Extract this builder ZIP and open GitHub Desktop.
 2. **File → New repository**; name it `WaveFlow-True-Portable-Builder`; uncheck *Initialize with README*.
 3. **Repository → Show in Explorer**; copy the CONTENTS of this extracted folder into the repository folder. Keep `.github/workflows/build.yml` at the root.
-4. Back in GitHub Desktop, commit all changes (e.g. `Add WaveFlow true portable builder v1.0`) and **Publish repository**.
+4. Back in GitHub Desktop, commit all changes (e.g. `Add WaveFlow true portable builder v1.1`) and **Publish repository**.
 5. Open your repository in the browser. Go to **Actions → Build WaveFlow True Portable → Run workflow** (branch `main`).
 6. Once successful, open the run → **Artifacts** → `WaveFlowPortable-v1.8.4-win64` (available for 1 day).
 7. Extract the downloaded artifact, then extract the contained `WaveFlowPortable-v1.8.4-win64.zip` to your PortableApps folder.
@@ -52,3 +52,9 @@ WaveFlow's v1.8.4 Windows release ships a `setup.exe`; the source has a pre-Taur
 ## Status
 
 The ZIP was structurally checked and the source patch is based on reviewed v1.8.4 upstream source. **Windows build, functionality and zero-remnant behavior remain unverified until you run GitHub Actions and test Windows.** Please send Actions logs if the build fails.
+
+## v1.1 patch fix (GitHub Actions exit 1)
+
+The first reported build failed while disabling Windows autostart because the v1.0 patch expected a byte-for-byte function block. The upstream source contains the functions, but the formatting did not match. v1.1 matches the actual function declarations and their next section boundary, checks the expected autostart calls, then replaces only those two functions. The plugin-removal patch is similarly whitespace-tolerant. Other portability behavior remains unchanged.
+
+Update in GitHub Desktop: extract v1.1, overwrite the files in your existing builder repository, **Commit to main**, **Push origin**, then rerun the Actions workflow.
